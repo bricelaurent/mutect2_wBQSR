@@ -396,7 +396,7 @@ task CreateSequenceGroupingTSV {
     # Use python to create the Sequencing Groupings used for BQSR and PrintReads Scatter. 
     # It outputs to stdout where it is parsed into a wdl Array[Array[String]]
     # e.g. [["1"], ["2"], ["3", "4"], ["5"], ["6", "7", "8"]]
-    command <<<
+    command {
         python <<CODE
         with open("~{ref_dict}", "r") as ref_dict_file:
             sequence_tuple_list = []
@@ -416,26 +416,24 @@ task CreateSequenceGroupingTSV {
         for sequence_tuple in sequence_tuple_list[1:]:
             if temp_size + sequence_tuple[1] <= longest_sequence:
                 temp_size += sequence_tuple[1]
-                tsv_string += "	" + sequence_tuple[0] + hg38_protection_tag
+                tsv_string += "\t" + sequence_tuple[0] + hg38_protection_tag
             else:
-                tsv_string += "
-" + sequence_tuple[0] + hg38_protection_tag
+                tsv_string += "\n" + sequence_tuple[0] + hg38_protection_tag
                 temp_size = sequence_tuple[1]
         # add the unmapped sequences as a separate line to ensure that they are recalibrated as well
         with open("sequence_grouping.txt","w") as tsv_file:
             tsv_file.write(tsv_string)
             tsv_file.close()
 
-        tsv_string += '
-' + "unmapped"
+        tsv_string += '\n' + "unmapped"
 
         with open("sequence_grouping_with_unmapped.txt","w") as tsv_file_with_unmapped:
             tsv_file_with_unmapped.write(tsv_string)
             tsv_file_with_unmapped.close()
         CODE
-    >>>
+    }
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: docker_image
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: runtime_params.machine_mem + " MB"
         disks: "local-disk " + runtime_params.disk + " HDD"
@@ -470,7 +468,7 @@ task BaseRecalibrator {
     command {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Xms~{runtime_params.command_mem}m" BaseRecalibrator             -R ~{ref_fasta}             -I ~{input_bam}             -L ~{sequence_group_interval}             --use-original-qualities             -O ~{recalibration_report_filename}             --known-sites ~{dbSNP_vcf}             --known-sites ~{sep=' --known-sites ' known_indels_sites_VCFs}
+        gatk --java-options "-Xms~{runtime_params.command_mem}m" BaseRecalibrator -R ~{ref_fasta} -I ~{input_bam} -L ~{sep=" -L " sequence_group_interval} --use-original-qualities -O ~{recalibration_report_filename} --known-sites ~{dbSNP_vcf} --known-sites ~{sep=' --known-sites ' known_indels_sites_VCFs}
     }
     runtime {
         docker: runtime_params.gatk_docker
@@ -499,7 +497,7 @@ task GatherBqsrReports {
     command {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Xms~{runtime_params.command_mem}m"             GatherBQSRReports             -I ~{sep=' -I ' input_bqsr_reports}             -O ~{output_report_filename}
+        gatk --java-options "-Xms~{runtime_params.command_mem}m" GatherBQSRReports -I ~{sep=' -I ' input_bqsr_reports} -O ~{output_report_filename}
     }
     runtime {
         docker: runtime_params.gatk_docker
@@ -533,7 +531,7 @@ task ApplyBQSR {
     command {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Xms~{runtime_params.command_mem}m"             ApplyBQSR             -R ~{ref_fasta}             -I ~{input_bam}             -O ~{output_bam_basename}.bam             -L ~{sep=" -L " sequence_group_interval}             -bqsr ~{recalibration_report}             --static-quantized-quals 10 --static-quantized-quals 20 --static-quantized-quals 30             --add-output-sam-program-record             --create-output-bam-md5             --use-original-qualities
+        gatk --java-options "-Xms~{runtime_params.command_mem}m" ApplyBQSR -R ~{ref_fasta} -I ~{input_bam} -O ~{output_bam_basename}.bam -L ~{sep=" -L " sequence_group_interval} -bqsr ~{recalibration_report} --static-quantized-quals 10 --static-quantized-quals 20 --static-quantized-quals 30 --add-output-sam-program-record --create-output-bam-md5 --use-original-qualities
     }
     runtime {
         docker: runtime_params.gatk_docker
@@ -562,7 +560,7 @@ task GatherBamFiles {
     command {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Dsamjdk.compression_level=~{compression_level} -Xms~{runtime_params.command_mem}m"             GatherBamFiles             --INPUT ~{sep=' --INPUT ' input_bams}             --OUTPUT ~{output_bam_basename}.bam             --CREATE_INDEX true             --CREATE_MD5_FILE true
+        gatk --java-options "-Dsamjdk.compression_level=~{compression_level} -Xms~{runtime_params.command_mem}m" GatherBamFiles --INPUT ~{sep=' --INPUT ' input_bams} --OUTPUT ~{output_bam_basename}.bam --CREATE_INDEX true --CREATE_MD5_FILE true
     }
     runtime {
         docker: runtime_params.gatk_docker
@@ -598,7 +596,7 @@ task SplitIntervals {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
         mkdir interval-files
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" SplitIntervals             -R ~{ref_fasta}             ~{"-L " + intervals}             -scatter ~{scatter_count}             -O interval-files             ~{split_intervals_extra_args}
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" SplitIntervals -R ~{ref_fasta} ~{"-L " + intervals} -scatter ~{scatter_count} -O interval-files ~{split_intervals_extra_args}
         cp interval-files/*.interval_list .
     }
 
@@ -701,15 +699,15 @@ task M2 {
         touch dataset.txt
         echo "" > normal_name.txt
 
-        gatk --java-options "-Xmx~{command_mem}m" GetSampleName -R ~{ref_fasta} -I ~{tumor_reads} -O tumor_name.txt -encode         ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
+        gatk --java-options "-Xmx~{command_mem}m" GetSampleName -R ~{ref_fasta} -I ~{tumor_reads} -O tumor_name.txt -encode ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
         tumor_command_line="-I ~{tumor_reads} -tumor `cat tumor_name.txt`"
 
         if [[ ! -z "~{normal_reads}" ]]; then
-            gatk --java-options "-Xmx~{command_mem}m" GetSampleName -R ~{ref_fasta} -I ~{normal_reads} -O normal_name.txt -encode             ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
+            gatk --java-options "-Xmx~{command_mem}m" GetSampleName -R ~{ref_fasta} -I ~{normal_reads} -O normal_name.txt -encode ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
             normal_command_line="-I ~{normal_reads} -normal `cat normal_name.txt`"
         fi
 
-        gatk --java-options "-Xmx~{command_mem}m" Mutect2             -R ~{ref_fasta}             $tumor_command_line             $normal_command_line             ~{"--germline-resource " + gnomad}             ~{"-pon " + pon}             ~{"-L " + intervals}             ~{"--alleles " + gga_vcf}             -O "~{output_vcf}"             ~{true='--bam-output bamout.bam' false='' make_bamout}             ~{true='--f1r2-tar-gz f1r2.tar.gz' false='' run_ob_filter}             ~{true='--mutect3-dataset dataset.txt' false='' make_m3_test_dataset}             ~{true='--mutect3-dataset dataset.txt --mutect3-training-mode' false='' make_m3_training_dataset}             ~{"--mutect3-training-truth " + m3_training_dataset_truth_vcf}             ~{m2_extra_args}             ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
+        gatk --java-options "-Xmx~{command_mem}m" Mutect2 -R ~{ref_fasta} $tumor_command_line $normal_command_line ~{"--germline-resource " + gnomad} ~{"-pon " + pon} ~{"-L " + intervals} ~{"--alleles " + gga_vcf} -O "~{output_vcf}" ~{true='--bam-output bamout.bam' false='' make_bamout} ~{true='--f1r2-tar-gz f1r2.tar.gz' false='' run_ob_filter} ~{true='--mutect3-dataset dataset.txt' false='' make_m3_test_dataset} ~{true='--mutect3-dataset dataset.txt --mutect3-training-mode' false='' make_m3_training_dataset} ~{"--mutect3-training-truth " + m3_training_dataset_truth_vcf} ~{m2_extra_args} ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
 
         m2_exit_code=$?
 
@@ -803,19 +801,19 @@ task MergeBamOuts {
       Int? disk_space   #override to request more disk than default small task params
     }
 
-    command <<<
+    command {
         # This command block assumes that there is at least one file in bam_outs.
         #  Do not call this task if len(bam_outs) == 0
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" GatherBamFiles             -I ~{sep=" -I " bam_outs} -O unsorted.out.bam -R ~{ref_fasta}
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" GatherBamFiles -I ~{sep=" -I " bam_outs} -O unsorted.out.bam -R ~{ref_fasta}
 
         # We must sort because adjacent scatters may have overlapping (padded) assembly regions, hence
         # overlapping bamouts
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" SortSam -I unsorted.out.bam             -O bamout.bam --SORT_ORDER coordinate -VALIDATION_STRINGENCY LENIENT
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" SortSam -I unsorted.out.bam -O bamout.bam --SORT_ORDER coordinate -VALIDATION_STRINGENCY LENIENT
         gatk --java-options "-Xmx~{runtime_params.command_mem}m" BuildBamIndex -I bamout.bam -VALIDATION_STRINGENCY LENIENT
-    >>>
+    }
 
     runtime {
         docker: runtime_params.gatk_docker
@@ -845,7 +843,7 @@ task MergeStats {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" MergeMutectStats             -stats ~{sep=" -stats " stats} -O merged.stats
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" MergeMutectStats -stats ~{sep=" -stats " stats} -O merged.stats
     }
 
     runtime {
@@ -875,7 +873,7 @@ task MergePileupSummaries {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" GatherPileupSummaries         --sequence-dictionary ~{ref_dict}         -I ~{sep=' -I ' input_tables}         -O ~{output_name}.tsv
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" GatherPileupSummaries --sequence-dictionary ~{ref_dict} -I ~{sep=' -I ' input_tables} -O ~{output_name}.tsv
     }
 
     runtime {
@@ -908,7 +906,7 @@ task LearnReadOrientationModel {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{command_mem}m" LearnReadOrientationModel             -I ~{sep=" -I " f1r2_tar_gz}             -O "artifact-priors.tar.gz"
+        gatk --java-options "-Xmx~{command_mem}m" LearnReadOrientationModel -I ~{sep=" -I " f1r2_tar_gz} -O "artifact-priors.tar.gz"
     }
 
     runtime {
@@ -940,7 +938,7 @@ task CalculateContamination {
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" CalculateContamination -I ~{tumor_pileups}         -O contamination.table --tumor-segmentation segments.table ~{"-matched " + normal_pileups}
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" CalculateContamination -I ~{tumor_pileups} -O contamination.table --tumor-segmentation segments.table ~{"-matched " + normal_pileups}
     }
 
     runtime {
@@ -992,7 +990,7 @@ task Filter {
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" FilterMutectCalls -V ~{unfiltered_vcf}             -R ~{ref_fasta}             -O ~{output_vcf}             ~{"--contamination-table " + contamination_table}             ~{"--tumor-segmentation " + maf_segments}             ~{"--ob-priors " + artifact_priors_tar_gz}             ~{"-stats " + mutect_stats}             --filtering-stats filtering.stats             ~{m2_extra_filtering_args}
+        gatk --java-options "-Xmx~{runtime_params.command_mem}m" FilterMutectCalls -V ~{unfiltered_vcf} -R ~{ref_fasta} -O ~{output_vcf} ~{"--contamination-table " + contamination_table} ~{"--tumor-segmentation " + maf_segments} ~{"--ob-priors " + artifact_priors_tar_gz} ~{"-stats " + mutect_stats} --filtering-stats filtering.stats ~{m2_extra_filtering_args}
     }
 
     runtime {
@@ -1050,7 +1048,7 @@ task FilterAlignmentArtifacts {
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{command_mem}m" FilterAlignmentArtifacts             -R ~{ref_fasta}             -V ~{input_vcf}             -I ~{reads}             --bwa-mem-index-image ~{realignment_index_bundle}             ~{realignment_extra_args}             -O ~{output_vcf}             ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
+        gatk --java-options "-Xmx~{command_mem}m" FilterAlignmentArtifacts -R ~{ref_fasta} -V ~{input_vcf} -I ~{reads} --bwa-mem-index-image ~{realignment_index_bundle} ~{realignment_extra_args} -O ~{output_vcf} ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
     }
 
     runtime {
@@ -1096,4 +1094,3 @@ task Concatenate {
         File concatenated = "output.txt"
     }
 }
-
