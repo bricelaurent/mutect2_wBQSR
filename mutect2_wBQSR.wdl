@@ -183,7 +183,7 @@ workflow Mutect2 {
     call GatherBqsrReports {
         input:
             input_bqsr_reports = BaseRecalibrator.recalibration_report,
-            output_report_filename = base_file_name + ".recal_data.csv",
+            output_report_filename = "recal_data.csv",
             runtime_params = standard_runtime
     }
 
