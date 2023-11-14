@@ -155,7 +155,8 @@ workflow Mutect2 {
         input:
         ref_dict = ref_dict,
         docker_image = python_docker,
-        preemptible_tries = preemptible
+        preemptible_tries = preemptible,
+        runtime_params = standard_runtime
     }
   
     # Perform Base Quality Score Recalibration (BQSR) on the sorted BAM in parallel
@@ -173,7 +174,7 @@ workflow Mutect2 {
                 known_indels_sites_indices = known_indels_sites_indices,
                 ref_dict = ref_dict,
                 ref_fasta = ref_fasta,
-                ref_fasta_index = ref_fai
+                ref_fasta_index = ref_fai,
                 runtime_params = standard_runtime
         }
     } 
@@ -182,7 +183,7 @@ workflow Mutect2 {
     call GatherBqsrReports {
         input:
             input_bqsr_reports = BaseRecalibrator.recalibration_report,
-            output_report_filename = base_file_name + ".recal_data.csv"
+            output_report_filename = base_file_name + ".recal_data.csv",
             runtime_params = standard_runtime
     }
 
@@ -198,7 +199,7 @@ workflow Mutect2 {
                 sequence_group_interval = subgroup,
                 ref_dict = ref_dict,
                 ref_fasta = ref_fasta,
-                ref_fasta_index = ref_fai
+                ref_fasta_index = ref_fai,
                 runtime_params = standard_runtime
         }
     } 
@@ -208,7 +209,7 @@ workflow Mutect2 {
         input:
             input_bams = ApplyBQSR.recalibrated_bam,
             output_bam_basename = "GatherBam",
-            compression_level = 2
+            compression_level = 2,
             runtime_params = standard_runtime
     }
     
@@ -390,6 +391,7 @@ task CreateSequenceGroupingTSV {
         Float mem_size_gb = 2
 
         String docker_image
+        Runtime runtime_params
     }
     # Use python to create the Sequencing Groupings used for BQSR and PrintReads Scatter. 
     # It outputs to stdout where it is parsed into a wdl Array[Array[String]]
